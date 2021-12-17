@@ -98,6 +98,8 @@ parser.add_argument('--x_gen_stepsize', type=float, default=1e-3)
 parser.add_argument('--z_gen_stepsize', type=float, default=3e-4)
 parser.add_argument('--x_gen_anneal', type=float, default=10.)
 parser.add_argument('--z_gen_anneal', type=float, default=10.)
+parser.add_argument('--x_gen_freeze', type=float, default=None)
+parser.add_argument('--z_gen_freeze', type=float, default=None)
 parser.add_argument('--gen_mean_only', type=utils.boolstr, default=False)
 parser.add_argument('--plt_npts', type=int, default=100)
 parser.add_argument('--plt_memory', type=int, default=100)
@@ -140,7 +142,6 @@ parser.add_argument('--vae_clamp', type=float, default=1e9, help="clamping prior
 args = parser.parse_args()
 
 args.arch_type = "cnn"
-args.input_size = [2]
 args.cuda = torch.cuda.is_available() and args.gpu >= 0
 args.model_signature = str(datetime.datetime.now())[0:19].replace(' ', '_')
 args.model_signature = args.model_signature.replace(':', '_')
@@ -200,9 +201,7 @@ def get_frame(method, model, args):
                 'draw_q0', 'eval_z1eps_logqt', 'eval_z1eps']
         model_args = {key: getattr(model, key) for key in args_keys}
         if method == "elbo":
-            # frame = dgm.ELBO(args.n_mc_px, **model_args)
-            model_args['draw_q0'] = model.forward
-            frame = dgm.ELBO_ffjord(args, **model_args)
+            frame = dgm.ELBO(args.n_mc_px, **model_args)
         elif method == "bigan":
             frame = dgm.BiGAN(args, **model_args)
         elif method == "gibbs":
@@ -291,6 +290,8 @@ if __name__ == '__main__':
     # warm up
     if args.warm_up > 0:
         frame_warm = get_frame("elbo", model, args)
+        orig_p_var = model.p_var
+        model.p_var = lambda x: torch.tensor(0.5).expand(model.input_size).to(x)
 
         for itr in range(1, args.warm_up + 1):
             # beta = itr / args.warm_up * args.kl_beta
@@ -318,12 +319,13 @@ if __name__ == '__main__':
             ))
             logger.info(log_message)
 
+        model.p_var = orig_p_var
         # z0 = torch.randn((args.batch_size, args.dim_z)).to(device)
         model_samples = frame_warm.generate(args.batch_size)
         plot('{}/samples/{:>06d}_warmup.png'.format(args.save, 0), model_samples[0])
         get_current_accuracy(model, train_loader, test_loader)
 
-    VAE.vae_clamp = prior_clamp
+    model.vae_clamp = prior_clamp
 
     if args.optim == 'SGD':
         optimizer = getattr(optim, args.optim)([{'params': model.parameters_enc(), 'lr': args.lr},
@@ -479,9 +481,9 @@ if __name__ == '__main__':
                     # langevin
                     zp, xp, xp0 = z0, x_test, torch.rand_like(x_test).to(device)
                     for i in range(1, 11):
-                        model_samples_ori_z = frame.generate("langv-x", draw_p, 10, z0=zp, stepsize=args.x_gen_stepsize, anneal=args.x_gen_anneal, x_range=[0.,1.])
-                        model_samples_ori_x = frame.generate("langv-x", draw_p, 10, x0=xp, stepsize=args.x_gen_stepsize, anneal=args.x_gen_anneal, x_range=[0.,1.])
-                        model_samples_ori_x0 = frame.generate("langv-x", draw_p, 10, x0=xp0, stepsize=args.x_gen_stepsize, anneal=args.x_gen_anneal, x_range=[0.,1.])
+                        model_samples_ori_z = frame.generate("langv-x", draw_p, 10, z0=zp, stepsize=args.x_gen_stepsize, anneal=args.x_gen_anneal, freeze=args.x_gen_freeze, x_range=[0.,1.])
+                        model_samples_ori_x = frame.generate("langv-x", draw_p, 10, x0=xp, stepsize=args.x_gen_stepsize, anneal=args.x_gen_anneal, freeze=args.x_gen_freeze, x_range=[0.,1.])
+                        model_samples_ori_x0 = frame.generate("langv-x", draw_p, 10, x0=xp0, stepsize=args.x_gen_stepsize, anneal=args.x_gen_anneal, freeze=args.x_gen_freeze, x_range=[0.,1.])
                         zp, xp, xp0 = model_samples_ori_z[1], model_samples_ori_x[0], model_samples_ori_x0[0]
                         plot('{}/samples/{:>06d}_x_langv_oriz_{:>06d}.png'.format(args.save, itr, i*10), draw_p_hat(model_samples_ori_z[1], 1).squeeze(0))
                         plot('{}/samples/{:>06d}_x_langv_orix_{:>06d}.png'.format(args.save, itr, i*10), draw_p_hat(model_samples_ori_x[1], 1).squeeze(0))
@@ -489,9 +491,9 @@ if __name__ == '__main__':
 
                     zp, xp, xp0 = z0, x_test, torch.rand_like(x_test).to(device)
                     for i in range(1, 11):
-                        model_samples_ori_z = frame.generate("langv-z", draw_p, 10, z0=zp, stepsize=args.z_gen_stepsize, anneal=args.z_gen_anneal)
-                        model_samples_ori_x = frame.generate("langv-z", draw_p, 10, x0=xp, stepsize=args.z_gen_stepsize, anneal=args.z_gen_anneal)
-                        model_samples_ori_x0 = frame.generate("langv-z", draw_p, 10, x0=xp0, stepsize=args.z_gen_stepsize, anneal=args.z_gen_anneal)
+                        model_samples_ori_z = frame.generate("langv-z", draw_p, 10, z0=zp, stepsize=args.z_gen_stepsize, anneal=args.z_gen_anneal, freeze=args.z_gen_freeze)
+                        model_samples_ori_x = frame.generate("langv-z", draw_p, 10, x0=xp, stepsize=args.z_gen_stepsize, anneal=args.z_gen_anneal, freeze=args.z_gen_freeze)
+                        model_samples_ori_x0 = frame.generate("langv-z", draw_p, 10, x0=xp0, stepsize=args.z_gen_stepsize, anneal=args.z_gen_anneal, freeze=args.z_gen_freeze)
                         zp, xp, xp0 = model_samples_ori_z[1], model_samples_ori_x[0], model_samples_ori_x0[0]
                         plot('{}/samples/{:>06d}_z_langv_oriz_{:>06d}.png'.format(args.save, itr, i*10), draw_p_hat(model_samples_ori_z[1], 1).squeeze(0))
                         plot('{}/samples/{:>06d}_z_langv_orix_{:>06d}.png'.format(args.save, itr, i*10), draw_p_hat(model_samples_ori_x[1], 1).squeeze(0))

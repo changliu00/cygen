@@ -285,49 +285,6 @@ class ELBO(GenBase):
     def getloss(self, x, kl_beta = 1.):
         return self.getlosses(x, kl_beta)[0]
 
-class ELBO_ffjord(GenBase):
-    def __init__(self, n_mc_px, eval_logprior, draw_prior, eval_logp, draw_p, *,
-            eval_logq = None, draw_q = None,
-            draw_q0 = None, eval_z1eps_logqt = None, eval_z1eps = None
-        ):
-        GenBase.__init__(self, None, False, eval_logprior, draw_prior, eval_logp, draw_p,
-                eval_logq=eval_logq, draw_q=draw_q,
-                draw_q0=draw_q0, eval_z1eps_logqt=eval_z1eps_logqt, eval_z1eps=eval_z1eps)
-        self.n_mc_px = n_mc_px
-
-    def getlosses(self, x, kl_beta = 1.):
-
-        reconstruction_function = nn.MSELoss(size_average=False)
-
-        batch_size = x.size(0)
-
-        x_mean, z_mu, z_var, ldj, z_0, z_k = self.draw_q0(x)
-
-        bce = reconstruction_function(x_mean, x)
-
-        log_p_zk = log_normal_standard(z_k, dim=1)
-        # ln q(z_0)  (not averaged)
-        log_q_z0 = log_normal_diag(z_0, mean=z_mu, log_var=z_var.log(), dim=1)
-        # N E_q0[ ln q(z_0) - ln p(z_k) ]
-        summed_logs = tc.sum(log_q_z0 - log_p_zk)
-
-        # sum over batches
-        summed_ldj = tc.sum(ldj)
-
-        # ldj = N E_q_z0[\sum_k log |det dz_k/dz_k-1| ]
-        kl = (summed_logs - summed_ldj)
-        loss = bce + kl_beta * kl
-
-        loss /= float(batch_size)
-        bce /= float(batch_size)
-        kl /= float(batch_size)
-        # print(bce.data.item(), kl.data.item())
-
-        return loss, bce, kl
-
-    def getloss(self, x, kl_beta = 1.):
-        return self.getlosses(x, kl_beta)[0]
-
 class GibbsNet(GenBase):
     def __init__(self, args, n_gibbs, eval_logprior, draw_prior, eval_logp, draw_p, *,
             eval_logq = None, draw_q = None,
