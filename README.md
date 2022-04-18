@@ -60,5 +60,20 @@ See the paper for more results.
 <!--As illustrated in the figure, CyGen improves generation quality on MNIST dataset compared with the pretrained VAE model.-->
 <!--DAE models has less satisfying generation quality due to incompatible conditionals.-->
 
+## Citation
+```
+@inproceedings{liu2021generative,
+  author = {Liu, Chang and Tang, Haoyue and Qin, Tao and Wang, Jintao and Liu, Tie-Yan},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor = {M. Ranzato and A. Beygelzimer and Y. Dauphin and P.S. Liang and J. Wortman Vaughan},
+  pages = {30242--30256},
+  publisher = {Curran Associates, Inc.},
+  title = {On the Generative Utility of Cyclic Conditionals},
+  url = {https://proceedings.neurips.cc/paper/2021/file/fe04e05fbe48920b8ba90bea2ddfe60b-Paper.pdf},
+  volume = {34},
+  year = {2021}
+}
+```
+
 [changliu]: https://changliu00.github.io/
 
